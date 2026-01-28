@@ -4,30 +4,48 @@
 #include "nvs_flash.h"
 #include "esp_netif.h"
 #include "wifi_secrets.h"
+#include "http_server.h"
 
 static const char *TAG = "WIFI_LOG";
+
+static void handle_wifi_event(int32_t event_id)
+{
+    if (event_id == WIFI_EVENT_STA_START)
+    {
+        ESP_LOGI(TAG, "WIFI_EVENT_STA_START -> connect");
+        esp_err_t r = esp_wifi_connect();
+        if (r != ESP_OK)
+            ESP_LOGW(TAG, "esp_wifi_connect() returned %d", r);
+    }
+    else if (event_id == WIFI_EVENT_STA_DISCONNECTED)
+    {
+        ESP_LOGW(TAG, "STA disconneced, retrying...");
+        esp_wifi_connect();
+    }
+    else if (event_id == WIFI_EVENT_STA_CONNECTED)
+    {
+        ESP_LOGI(TAG, "STA connected");
+    }
+}
+
+static void handle_ip_event(int32_t event_id, void *event_data)
+{
+    if (event_id == IP_EVENT_STA_GOT_IP)
+    {
+        http_server_start();
+    }
+}
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data)
 {
     if (event_base == WIFI_EVENT)
     {
-        if (event_id == WIFI_EVENT_STA_START)
-        {
-            ESP_LOGI(TAG, "WIFI_EVENT_STA_START -> connect");
-            esp_err_t r = esp_wifi_connect();
-            if (r != ESP_OK)
-                ESP_LOGW(TAG, "esp_wifi_connect() returned %d", r);
-        }
-        else if (event_id == WIFI_EVENT_STA_DISCONNECTED)
-        {
-            ESP_LOGW(TAG, "STA disconneced, retrying...");
-            esp_wifi_connect();
-        }
-        else if (event_id == WIFI_EVENT_STA_CONNECTED)
-        {
-            ESP_LOGI(TAG, "STA connected");
-        }
+        handle_wifi_event(event_id);
+    }
+    else if (event_base == IP_EVENT)
+    {
+        handle_ip_event(event_id, event_data);
     }
 }
 
@@ -64,8 +82,11 @@ void wifi_init_sta(void)
     // apply wifi config to station
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
 
-    esp_err_t reg_err = esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL);
-    ESP_LOGI(TAG, "wifi handler registered: %d", reg_err);
+    esp_err_t ret_wifi = esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL);
+
+    esp_err_t ret_ip = esp_event_handler_instance_register(IP_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL);
+
+    ESP_LOGI(TAG, "event handlers registered: %d, %d", ret_wifi, ret_ip);
 
     ESP_ERROR_CHECK(esp_wifi_start());
 }

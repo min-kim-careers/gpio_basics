@@ -1,2 +1,6 @@
 file(GLOB SRC_FILES "*.c")
-idf_component_register(SRCS ${SRC_FILES} INCLUDE_DIRS ".")
+idf_component_register(
+    SRCS ${SRC_FILES}
+    INCLUDE_DIRS "."
+    REQUIRES esp_wifi nvs_flash esp_http_server
+)
